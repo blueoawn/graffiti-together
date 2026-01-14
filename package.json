@@ -1,0 +1,19 @@
+{
+  "name": "graffiti-together",
+  "version": "1.0.0",
+  "description": "Real-time collaborative drawing application",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@clockworklabs/spacetimedb-sdk": "^1.0.0",
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "vite": "^7.3.1"
+  }
+}
