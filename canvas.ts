@@ -68,6 +68,15 @@ function setupCanvas(): void {
   document.body.style.fontFamily =
     "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
 
+  // Inject navbar if PHP didn't render it
+  if (!document.getElementById("navbar")) {
+    fetch("/navbar.php")
+      .then((r) => r.text())
+      .then((html) => {
+        document.body.insertAdjacentHTML("afterbegin", html);
+      });
+  }
+
   // Create wrapper container
   appContainer = document.createElement("div");
   appContainer.style.display = "flex";
