@@ -1,16 +1,31 @@
 import {
   DbConnection,
   type EventContext,
-  type Stroke,
-  type Point,
-  type ConnectedUser,
   type ReducerEventContext,
   type ErrorContext,
   type SubscriptionEventContext,
 } from "./src/module_bindings/index.ts";
 
+// Local type definitions matching the SpacetimeDB schema
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface Stroke {
+  strokeId: bigint;
+  points: Point[];
+  color: number;
+  brushSize: number;
+  timestamp: bigint;
+}
+
+interface ConnectedUser {
+  identity: unknown;
+}
+
 // -- Configuration --
-const SPACETIMEDB_URI = "ws://localhost:3000";
+const SPACETIMEDB_URI = "wss://grem.studio/spacetimedb/";
 const MODULE_NAME = "graffiti-together";
 const CANVAS_WIDTH = 800;
 const CANVAS_HEIGHT = 600;
@@ -168,11 +183,11 @@ function onMouseUp(_e: MouseEvent): void {
   isDrawing = false;
 
   if (currentPoints.length >= 2 && connection) {
-    connection.reducers.addStroke(
-      currentPoints,
-      currentColor,
-      currentBrushSize
-    );
+    connection.reducers.addStroke({
+      points: currentPoints,
+      color: currentColor,
+      brushSize: currentBrushSize,
+    });
   }
 
   currentPoints = [];
@@ -245,7 +260,7 @@ function onSubscriptionApplied(_ctx: SubscriptionEventContext): void {
 
 function onUsersSubscriptionApplied(_ctx: SubscriptionEventContext): void {
   if (!connection) return;
-  activeUserCount = connection.db.connectedUsers.count();
+  activeUserCount = Number(connection.db.connectedUsers.count());
   console.log("Users online:", activeUserCount);
   if (onUserCountChangeCallback) onUserCountChangeCallback(activeUserCount);
 }
@@ -274,9 +289,7 @@ function onUserDeleted(_ctx: EventContext, _user: ConnectedUser): void {
 
 function onAddStrokeResult(
   ctx: ReducerEventContext,
-  _points: Point[],
-  _color: number,
-  _brushSize: number
+  _args: { points: Point[]; color: number; brushSize: number }
 ): void {
   if (ctx.event.status.tag === "Failed") {
     console.error("Failed to add stroke:", ctx.event.status.value);
