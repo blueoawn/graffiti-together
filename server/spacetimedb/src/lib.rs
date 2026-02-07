@@ -10,7 +10,6 @@ pub struct Stroke {
     pub points: Vec<Point>,
     pub color: u32,        // RGBA hex color
     pub brush_size: f32,
-    pub is_eraser: bool,
     pub timestamp: u64,
 }
 
@@ -19,6 +18,13 @@ pub struct Stroke {
 pub struct Point {
     pub x: f32,
     pub y: f32,
+}
+
+/// Tracks currently connected users
+#[spacetimedb::table(name = connected_users, public)]
+pub struct ConnectedUser {
+    #[primary_key]
+    pub identity: spacetimedb::Identity,
 }
 
 /// Admins who can manage the canvas
@@ -40,13 +46,19 @@ pub fn init(_ctx: &ReducerContext) {
 }
 
 #[spacetimedb::reducer(client_connected)]
-pub fn identity_connected(_ctx: &ReducerContext) {
-    // Called everytime a new client connects
+pub fn identity_connected(ctx: &ReducerContext) {
+    ctx.db.connected_users().insert(ConnectedUser {
+        identity: ctx.sender,
+    });
+    log::info!("User connected. Total: {}", ctx.db.connected_users().count());
 }
 
 #[spacetimedb::reducer(client_disconnected)]
-pub fn identity_disconnected(_ctx: &ReducerContext) {
-    // Called everytime a client disconnects
+pub fn identity_disconnected(ctx: &ReducerContext) {
+    if let Some(user) = ctx.db.connected_users().identity().find(&ctx.sender) {
+        ctx.db.connected_users().delete(user);
+    }
+    log::info!("User disconnected. Total: {}", ctx.db.connected_users().count());
 }
 
 /// Add a new stroke to the canvas
@@ -56,7 +68,6 @@ pub fn add_stroke(
     points: Vec<Point>,
     color: u32,
     brush_size: f32,
-    is_eraser: bool,
 ) {
     let timestamp = ctx.timestamp.to_micros_since_unix_epoch() as u64;
 
@@ -65,7 +76,6 @@ pub fn add_stroke(
         points,
         color,
         brush_size,
-        is_eraser,
         timestamp,
     });
     

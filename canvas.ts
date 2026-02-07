@@ -3,6 +3,7 @@ import {
   type EventContext,
   type Stroke,
   type Point,
+  type ConnectedUser,
   type ReducerEventContext,
   type ErrorContext,
   type SubscriptionEventContext,
@@ -24,7 +25,13 @@ let isDrawing = false;
 let currentPoints: Point[] = [];
 let currentColor: number = 0x000000ff; // black RGBA
 let currentBrushSize: number = 3;
-let currentIsEraser: boolean = false;
+
+// Active users tracking
+let activeUserCount = 0;
+let onUserCountChangeCallback: ((count: number) => void) | null = null;
+
+// -- Exported app container --
+export let appContainer: HTMLDivElement;
 
 // -- Color helpers --
 
@@ -39,14 +46,30 @@ function rgbaU32ToCss(rgba: number): string {
 // -- Canvas setup --
 
 function setupCanvas(): void {
+  // Body styling
+  document.body.style.margin = "0";
+  document.body.style.padding = "0";
+  document.body.style.backgroundColor = "#1a1a2e";
+  document.body.style.fontFamily =
+    "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+
+  // Create wrapper container
+  appContainer = document.createElement("div");
+  appContainer.style.display = "flex";
+  appContainer.style.flexDirection = "column";
+  appContainer.style.alignItems = "center";
+  appContainer.style.margin = "24px auto";
+  appContainer.style.maxWidth = CANVAS_WIDTH + "px";
+  document.body.appendChild(appContainer);
+
   canvas = document.createElement("canvas");
   canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT;
-  canvas.style.border = "1px solid #ccc";
   canvas.style.display = "block";
-  canvas.style.margin = "0 auto";
   canvas.style.cursor = "crosshair";
-  document.body.appendChild(canvas);
+  canvas.style.borderRadius = "0 0 8px 8px";
+  canvas.style.boxShadow = "0 4px 20px rgba(0,0,0,0.3)";
+  appContainer.appendChild(canvas);
 
   const context = canvas.getContext("2d");
   if (!context) throw new Error("Failed to get 2D canvas context");
@@ -68,14 +91,8 @@ function drawStroke(stroke: Stroke): void {
 
   ctx.save();
 
-  if (stroke.isEraser) {
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.strokeStyle = "rgba(0,0,0,1)";
-  } else {
-    ctx.globalCompositeOperation = "source-over";
-    ctx.strokeStyle = rgbaU32ToCss(stroke.color);
-  }
-
+  ctx.globalCompositeOperation = "source-over";
+  ctx.strokeStyle = rgbaU32ToCss(stroke.color);
   ctx.lineWidth = stroke.brushSize;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -132,14 +149,8 @@ function onMouseMove(e: MouseEvent): void {
     const prev = currentPoints[currentPoints.length - 2];
     ctx.save();
 
-    if (currentIsEraser) {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.strokeStyle = "rgba(0,0,0,1)";
-    } else {
-      ctx.globalCompositeOperation = "source-over";
-      ctx.strokeStyle = rgbaU32ToCss(currentColor);
-    }
-
+    ctx.globalCompositeOperation = "source-over";
+    ctx.strokeStyle = rgbaU32ToCss(currentColor);
     ctx.lineWidth = currentBrushSize;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -160,8 +171,7 @@ function onMouseUp(_e: MouseEvent): void {
     connection.reducers.addStroke(
       currentPoints,
       currentColor,
-      currentBrushSize,
-      currentIsEraser
+      currentBrushSize
     );
   }
 
@@ -192,15 +202,25 @@ function onConnected(
   localStorage.setItem("spacetimedb_token", token);
   console.log("Connected to SpacetimeDB as", identity.toHexString());
 
-  // Subscribe to all strokes
+  // Subscribe to strokes
   conn
     .subscriptionBuilder()
     .onApplied(onSubscriptionApplied)
     .subscribe("SELECT * FROM strokes");
 
+  // Subscribe to connected users
+  conn
+    .subscriptionBuilder()
+    .onApplied(onUsersSubscriptionApplied)
+    .subscribe("SELECT * FROM connected_users");
+
   // Listen for real-time stroke changes
   conn.db.strokes.onInsert(onStrokeInserted);
   conn.db.strokes.onDelete(onStrokeDeleted);
+
+  // Listen for user connect/disconnect
+  conn.db.connectedUsers.onInsert(onUserInserted);
+  conn.db.connectedUsers.onDelete(onUserDeleted);
 
   // Listen for reducer results
   conn.reducers.onAddStroke(onAddStrokeResult);
@@ -223,6 +243,13 @@ function onSubscriptionApplied(_ctx: SubscriptionEventContext): void {
   renderAllStrokes();
 }
 
+function onUsersSubscriptionApplied(_ctx: SubscriptionEventContext): void {
+  if (!connection) return;
+  activeUserCount = connection.db.connectedUsers.count();
+  console.log("Users online:", activeUserCount);
+  if (onUserCountChangeCallback) onUserCountChangeCallback(activeUserCount);
+}
+
 // -- Table callbacks --
 
 function onStrokeInserted(_ctx: EventContext, stroke: Stroke): void {
@@ -230,13 +257,27 @@ function onStrokeInserted(_ctx: EventContext, stroke: Stroke): void {
 }
 
 function onStrokeDeleted(_ctx: EventContext, _stroke: Stroke): void {
-  // A stroke was deleted (e.g. from clear_canvas), re-render everything
   renderAllStrokes();
+}
+
+function onUserInserted(_ctx: EventContext, _user: ConnectedUser): void {
+  activeUserCount++;
+  if (onUserCountChangeCallback) onUserCountChangeCallback(activeUserCount);
+}
+
+function onUserDeleted(_ctx: EventContext, _user: ConnectedUser): void {
+  activeUserCount = Math.max(0, activeUserCount - 1);
+  if (onUserCountChangeCallback) onUserCountChangeCallback(activeUserCount);
 }
 
 // -- Reducer result callbacks --
 
-function onAddStrokeResult(ctx: ReducerEventContext, _points: Point[], _color: number, _brushSize: number, _isEraser: boolean): void {
+function onAddStrokeResult(
+  ctx: ReducerEventContext,
+  _points: Point[],
+  _color: number,
+  _brushSize: number
+): void {
   if (ctx.event.status.tag === "Failed") {
     console.error("Failed to add stroke:", ctx.event.status.value);
   }
@@ -252,15 +293,10 @@ function onClearCanvasResult(ctx: ReducerEventContext): void {
 
 export function setColor(rgba: number): void {
   currentColor = rgba;
-  currentIsEraser = false;
 }
 
 export function setBrushSize(size: number): void {
   currentBrushSize = size;
-}
-
-export function setEraser(enabled: boolean): void {
-  currentIsEraser = enabled;
 }
 
 export function clearCanvas(): void {
@@ -272,6 +308,19 @@ export function clearCanvas(): void {
 export function getConnection(): DbConnection | null {
   return connection;
 }
+
+export function getActiveUserCount(): number {
+  return activeUserCount;
+}
+
+export function onActiveUserCountChange(
+  cb: (count: number) => void
+): void {
+  onUserCountChangeCallback = cb;
+}
+
+// -- Expose to dev console --
+(window as unknown as Record<string, unknown>).clearCanvas = clearCanvas;
 
 // -- Self-initialize --
 setupCanvas();
