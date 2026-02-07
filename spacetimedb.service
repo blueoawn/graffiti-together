@@ -1,0 +1,15 @@
+[Unit]
+Description=SpacetimeDB server for graffiti-together
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/webapp/server/grem.studio/graffiti-together
+Environment=PATH=/home/webapp/.local/bin:/home/webapp/.nvm/versions/node/v20.19.6/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/webapp/.local/bin/spacetime start -l 0.0.0.0:3031
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
