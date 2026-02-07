@@ -1,0 +1,15 @@
+[Unit]
+Description=Graffiti Together frontend server
+After=network-online.target spacetimedb.service
+Wants=network-online.target spacetimedb.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/webapp/server/grem.studio/graffiti-together
+Environment=PATH=/home/webapp/.nvm/versions/node/v20.19.6/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/webapp/.nvm/versions/node/v20.19.6/bin/npx serve dist -l 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
