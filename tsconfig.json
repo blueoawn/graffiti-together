@@ -19,8 +19,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     
-    /* Phaser types */
-    "types": ["node"]
+    /* Types */
+    "types": []
   },
-  "include": ["*.ts"]
+  "include": ["*.ts", "src/**/*.ts"]
 }

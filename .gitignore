@@ -37,7 +37,13 @@ Thumbs.db
 .DS_Store
 
 # SpacetimeDB generated files
-# src/module_bindings/
+src/module_bindings/
+
+# Rust build artifacts
+**/target/
+
+# Claude Code
+.claude/
 
 # Logs
 logs/

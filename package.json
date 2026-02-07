@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@clockworklabs/spacetimedb-sdk": "^1.0.0",
-    "phaser": "^3.80.1"
+    "phaser": "^3.80.1",
+    "playsocketjs": "^2.7.0",
+    "spacetimedb": "1.8"
   },
   "devDependencies": {
     "typescript": "^5.3.3",
