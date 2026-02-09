@@ -134,7 +134,9 @@ function drawStroke(stroke: Stroke): void {
 function renderAllStrokes(): void {
   clearCanvasLocal();
   if (!connection) return;
-  for (const stroke of connection.db.strokes.iter()) {
+  const strokes = Array.from(connection.db.strokes.iter()) as Stroke[];
+  strokes.sort((a, b) => Number(a.timestamp - b.timestamp));
+  for (const stroke of strokes) {
     drawStroke(stroke);
   }
 }
