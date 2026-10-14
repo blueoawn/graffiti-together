@@ -144,6 +144,16 @@ function renderAllStrokes(): void {
   for (const stroke of strokes) {
     drawStroke(stroke);
   }
+  // Keep the local in-progress stroke visible across remote-triggered redraws
+  if (isDrawing) {
+    drawStroke({
+      strokeId: 0n,
+      points: currentPoints,
+      color: currentColor,
+      brushSize: currentBrushSize,
+      timestamp: 0n,
+    });
+  }
 }
 
 // -- Input handling --
