@@ -38,6 +38,7 @@ let ctx: CanvasRenderingContext2D;
 
 // Drawing state
 let isDrawing = false;
+let drawingPointerId: number | null = null;
 let currentPoints: Point[] = [];
 let currentColor: number = 0x000000ff; // black RGBA
 let currentBrushSize: number = 3;
@@ -84,14 +85,19 @@ function setupCanvas(): void {
   appContainer.style.flexDirection = "column";
   appContainer.style.alignItems = "center";
   appContainer.style.margin = "24px auto";
+  appContainer.style.width = "calc(100% - 24px)";
   appContainer.style.maxWidth = CANVAS_WIDTH + "px";
+  appContainer.style.boxSizing = "border-box";
   document.body.appendChild(appContainer);
 
   canvas = document.createElement("canvas");
   canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT;
   canvas.style.display = "block";
+  canvas.style.width = "100%";
+  canvas.style.height = "auto";
   canvas.style.cursor = "crosshair";
+  canvas.style.touchAction = "none";
   canvas.style.borderRadius = "0 0 8px 8px";
   canvas.style.boxShadow = "0 4px 20px rgba(0,0,0,0.3)";
   appContainer.appendChild(canvas);
@@ -158,29 +164,33 @@ function renderAllStrokes(): void {
 
 // -- Input handling --
 
-function getCanvasPos(e: MouseEvent): Point {
+function getCanvasPos(e: PointerEvent): Point {
   const rect = canvas.getBoundingClientRect();
   return {
-    x: e.clientX - rect.left,
-    y: e.clientY - rect.top,
+    x: ((e.clientX - rect.left) * canvas.width) / rect.width,
+    y: ((e.clientY - rect.top) * canvas.height) / rect.height,
   };
 }
 
 function setupInputHandlers(): void {
-  canvas.addEventListener("mousedown", onMouseDown);
-  canvas.addEventListener("mousemove", onMouseMove);
-  canvas.addEventListener("mouseup", onMouseUp);
-  canvas.addEventListener("mouseleave", onMouseUp);
+  canvas.addEventListener("pointerdown", onPointerDown);
+  canvas.addEventListener("pointermove", onPointerMove);
+  canvas.addEventListener("pointerup", onPointerUp);
+  canvas.addEventListener("pointercancel", onPointerUp);
 }
 
-function onMouseDown(e: MouseEvent): void {
-  if (e.button !== 0) return;
+function onPointerDown(e: PointerEvent): void {
+  if (!e.isPrimary || e.button !== 0) return;
+  e.preventDefault();
   isDrawing = true;
+  drawingPointerId = e.pointerId;
+  canvas.setPointerCapture(e.pointerId);
   currentPoints = [getCanvasPos(e)];
 }
 
-function onMouseMove(e: MouseEvent): void {
-  if (!isDrawing) return;
+function onPointerMove(e: PointerEvent): void {
+  if (!isDrawing || e.pointerId !== drawingPointerId) return;
+  e.preventDefault();
 
   const point = getCanvasPos(e);
   currentPoints.push(point);
@@ -204,9 +214,10 @@ function onMouseMove(e: MouseEvent): void {
   }
 }
 
-function onMouseUp(_e: MouseEvent): void {
-  if (!isDrawing) return;
+function onPointerUp(e: PointerEvent): void {
+  if (!isDrawing || e.pointerId !== drawingPointerId) return;
   isDrawing = false;
+  drawingPointerId = null;
 
   if (currentPoints.length >= 2 && connection) {
     connection.reducers.addStroke({
