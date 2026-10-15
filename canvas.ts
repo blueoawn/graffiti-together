@@ -32,6 +32,7 @@ const CANVAS_HEIGHT = 600;
 
 // -- State --
 let connection: DbConnection | null = null;
+let strokesLoaded = false;
 let canvas: HTMLCanvasElement;
 let ctx: CanvasRenderingContext2D;
 
@@ -141,9 +142,23 @@ function renderAllStrokes(): void {
   clearCanvasLocal();
   if (!connection) return;
   const strokes = Array.from(connection.db.strokes.iter()) as Stroke[];
-  strokes.sort((a, b) => Number(a.timestamp - b.timestamp));
+  // strokeId is server-assigned and strictly increasing, so it gives every
+  // client the same deterministic z-order (timestamps can tie).
+  strokes.sort((a, b) =>
+    a.strokeId < b.strokeId ? -1 : a.strokeId > b.strokeId ? 1 : 0
+  );
   for (const stroke of strokes) {
     drawStroke(stroke);
+  }
+  // Keep the local in-progress stroke visible across remote-triggered redraws
+  if (isDrawing) {
+    drawStroke({
+      strokeId: 0n,
+      points: currentPoints,
+      color: currentColor,
+      brushSize: currentBrushSize,
+      timestamp: 0n,
+    });
   }
 }
 
@@ -271,12 +286,14 @@ function onConnectError(_ctx: ErrorContext, error: Error): void {
 function onDisconnect(_ctx: ErrorContext, error?: Error): void {
   console.log("Disconnected from SpacetimeDB", error ?? "");
   connection = null;
+  strokesLoaded = false;
 }
 
 // -- Subscription callbacks --
 
 function onSubscriptionApplied(_ctx: SubscriptionEventContext): void {
   console.log("Subscription applied, rendering existing strokes");
+  strokesLoaded = true;
   renderAllStrokes();
 }
 
@@ -289,8 +306,10 @@ function onUsersSubscriptionApplied(_ctx: SubscriptionEventContext): void {
 
 // -- Table callbacks --
 
-function onStrokeInserted(_ctx: EventContext, stroke: Stroke): void {
-  drawStroke(stroke);
+function onStrokeInserted(_ctx: EventContext, _stroke: Stroke): void {
+  if (!strokesLoaded) return;
+  // Re-render in canonical order so arrival order never affects layering
+  renderAllStrokes();
 }
 
 function onStrokeDeleted(_ctx: EventContext, _stroke: Stroke): void {
