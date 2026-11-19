@@ -1,17 +1,21 @@
 {
   "name": "graffiti-together",
   "version": "1.0.0",
+  "engines": { "node": "^22.23.4" },
   "description": "Real-time collaborative drawing application",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate": "node scripts/generate-bindings.mjs",
     "build": "vite build",
+    "test:runtime": "node scripts/run-runtime-smoke.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
-    "spacetimedb": "1.12.0"
+    "spacetimedb": "2.15.0"
   },
   "devDependencies": {
+    "esbuild": "0.27.2",
     "typescript": "^5.3.3",
     "vite": "^7.3.1"
   }
