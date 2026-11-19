@@ -1,7 +1,6 @@
 import {
   DbConnection,
   type EventContext,
-  type ReducerEventContext,
   type ErrorContext,
   type SubscriptionEventContext,
 } from "./src/module_bindings/index.ts";
@@ -237,7 +236,7 @@ function connect(): void {
 
   DbConnection.builder()
     .withUri(SPACETIMEDB_URI)
-    .withModuleName(MODULE_NAME)
+    .withDatabaseName(MODULE_NAME)
     .withToken(token)
     .onConnect(onConnected)
     .onConnectError(onConnectError)
@@ -275,8 +274,6 @@ function onConnected(
   conn.db.connectedUsers.onDelete(onUserDeleted);
 
   // Listen for reducer results
-  conn.reducers.onAddStroke(onAddStrokeResult);
-  conn.reducers.onClearCanvas(onClearCanvasResult);
 }
 
 function onConnectError(_ctx: ErrorContext, error: Error): void {
@@ -328,21 +325,6 @@ function onUserDeleted(_ctx: EventContext, _user: ConnectedUser): void {
 
 // -- Reducer result callbacks --
 
-function onAddStrokeResult(
-  ctx: ReducerEventContext,
-  _args: { points: Point[]; color: number; brushSize: number }
-): void {
-  if (ctx.event.status.tag === "Failed") {
-    console.error("Failed to add stroke:", ctx.event.status.value);
-  }
-}
-
-function onClearCanvasResult(ctx: ReducerEventContext): void {
-  if (ctx.event.status.tag === "Failed") {
-    console.error("Failed to clear canvas:", ctx.event.status.value);
-  }
-}
-
 // -- Public API for tools.ts integration --
 
 export function setColor(rgba: number): void {
@@ -355,7 +337,9 @@ export function setBrushSize(size: number): void {
 
 export function clearCanvas(): void {
   if (connection) {
-    connection.reducers.clearCanvas();
+    connection.reducers.clearCanvas().catch((error: unknown) => {
+      console.error("Failed to clear canvas:", error);
+    });
   }
 }
 

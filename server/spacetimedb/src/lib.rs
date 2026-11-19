@@ -1,14 +1,14 @@
 use spacetimedb::{ReducerContext, SpacetimeType, Table};
 
 /// Represents a single drawing stroke with coordinates and styling information
-#[spacetimedb::table(name = strokes, public)]
+#[spacetimedb::table(accessor = strokes, public)]
 #[derive(Clone)]
 pub struct Stroke {
     #[primary_key]
     #[auto_inc]
     pub stroke_id: u64,
     pub points: Vec<Point>,
-    pub color: u32,        // RGBA hex color
+    pub color: u32, // RGBA hex color
     pub brush_size: f32,
     pub timestamp: u64,
 }
@@ -21,14 +21,14 @@ pub struct Point {
 }
 
 /// Tracks currently connected users
-#[spacetimedb::table(name = connected_users, public)]
+#[spacetimedb::table(accessor = connected_users, public)]
 pub struct ConnectedUser {
     #[primary_key]
     pub identity: spacetimedb::Identity,
 }
 
 /// Admins who can manage the canvas
-#[spacetimedb::table(name = admins, public)]
+#[spacetimedb::table(accessor = admins, public)]
 pub struct Admin {
     #[primary_key]
     #[auto_inc]
@@ -40,35 +40,41 @@ pub struct Admin {
 }
 
 #[spacetimedb::reducer(init)]
-pub fn init(_ctx: &ReducerContext) {
-    // Called when the module is initially published
+pub fn init(ctx: &ReducerContext) {
+    ctx.db.admins().insert(Admin {
+        admin_id: 0,
+        identity: ctx.sender(),
+        username: "database-owner".into(),
+        created_at: ctx.timestamp.to_micros_since_unix_epoch() as u64,
+    });
     log::info!("Graffiti Together module initialized!");
 }
 
 #[spacetimedb::reducer(client_connected)]
 pub fn identity_connected(ctx: &ReducerContext) {
     ctx.db.connected_users().insert(ConnectedUser {
-        identity: ctx.sender,
+        identity: ctx.sender(),
     });
-    log::info!("User connected. Total: {}", ctx.db.connected_users().count());
+    log::info!(
+        "User connected. Total: {}",
+        ctx.db.connected_users().count()
+    );
 }
 
 #[spacetimedb::reducer(client_disconnected)]
 pub fn identity_disconnected(ctx: &ReducerContext) {
-    if let Some(user) = ctx.db.connected_users().identity().find(&ctx.sender) {
+    if let Some(user) = ctx.db.connected_users().identity().find(&ctx.sender()) {
         ctx.db.connected_users().delete(user);
     }
-    log::info!("User disconnected. Total: {}", ctx.db.connected_users().count());
+    log::info!(
+        "User disconnected. Total: {}",
+        ctx.db.connected_users().count()
+    );
 }
 
 /// Add a new stroke to the canvas
 #[spacetimedb::reducer]
-pub fn add_stroke(
-    ctx: &ReducerContext,
-    points: Vec<Point>,
-    color: u32,
-    brush_size: f32,
-) {
+pub fn add_stroke(ctx: &ReducerContext, points: Vec<Point>, color: u32, brush_size: f32) {
     let timestamp = ctx.timestamp.to_micros_since_unix_epoch() as u64;
 
     ctx.db.strokes().insert(Stroke {
@@ -78,14 +84,20 @@ pub fn add_stroke(
         brush_size,
         timestamp,
     });
-    
+
     log::info!("Stroke added with {} points", ctx.db.strokes().count());
 }
 
 /// Add a new admin (only callable by existing admins or during init)
 #[spacetimedb::reducer]
-pub fn add_admin(ctx: &ReducerContext, identity: spacetimedb::Identity, username: String) {
-    // In a real app, you'd check if caller is an admin
+pub fn add_admin(
+    ctx: &ReducerContext,
+    identity: spacetimedb::Identity,
+    username: String,
+) -> Result<(), String> {
+    if ctx.db.admins().identity().find(&ctx.sender()).is_none() {
+        return Err("Only admins can add admins".into());
+    }
     let timestamp = ctx.timestamp.to_micros_since_unix_epoch() as u64;
 
     ctx.db.admins().insert(Admin {
@@ -94,17 +106,21 @@ pub fn add_admin(ctx: &ReducerContext, identity: spacetimedb::Identity, username
         username,
         created_at: timestamp,
     });
-    
+
     log::info!("Admin added: {}", ctx.db.admins().count());
+    Ok(())
 }
 
 /// Clear all strokes (admin only)
 #[spacetimedb::reducer]
-pub fn clear_canvas(ctx: &ReducerContext) {
-    // In a real app, verify caller is an admin
+pub fn clear_canvas(ctx: &ReducerContext) -> Result<(), String> {
+    if ctx.db.admins().identity().find(&ctx.sender()).is_none() {
+        return Err("Only admins can clear the canvas".into());
+    }
     for stroke in ctx.db.strokes().iter() {
         ctx.db.strokes().delete(stroke);
     }
-    
+
     log::info!("Canvas cleared!");
+    Ok(())
 }
