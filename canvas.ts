@@ -69,9 +69,9 @@ function setupCanvas(): void {
   document.body.style.fontFamily =
     "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
 
-  // Inject navbar if PHP didn't render it
+  // Inject the shared static navbar if the page did not already include it
   if (!document.getElementById("navbar")) {
-    fetch("/navbar.php")
+    fetch("/navbar.html")
       .then((r) => r.text())
       .then((html) => {
         document.body.insertAdjacentHTML("afterbegin", html);
